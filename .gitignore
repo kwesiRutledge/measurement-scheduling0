@@ -1,2 +1,6 @@
 # Ignore Mac system files
 .DS_store
+
+#Ignore Image Files
+*.png
+*.eps
