@@ -52,7 +52,7 @@ classdef IntermittentKalmanFilter
 		%% Simulation Functions %%
 		%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-		function [ P_history ] = simulate_schedule( varargin )
+		function [ P_history , T ] = simulate_schedule( varargin )
 			%Description:
 			%	Simulates the filter and estimator working together over a given
 			%	time horizon (T) or until after the schedule has elapsed and a
@@ -61,6 +61,7 @@ classdef IntermittentKalmanFilter
 			%Usage:
 			%	[ P_history ] = ikf.simulate_schedule( M , 'TimeHorizon' , T )
 			%	[ P_history ] = ikf.simulate_schedule( M , 'CovarianceBound' , P_bound )
+			%	[ P_history , T ] = ikf.simulate_schedule( M , 'CovarianceBound' , P_bound , 'verbosity' , verbosity )
 
 			%% Input Processing %%
 
@@ -74,6 +75,21 @@ classdef IntermittentKalmanFilter
 					P_bound = varargin{4};
 				otherwise
 					error(['Unrecognized option: ' varargin{3} ])
+			end
+
+			varargin_idx = 5;
+			while varargin_idx <= nargin
+				switch varargin{varargin_idx}
+					case 'verbosity'
+						verbosity = varargin{varargin_idx+1};
+						varargin_idx = varargin_idx + 2;
+					otherwise
+						error(['Unexpected input to the function: ' varargin{varargin_idx} ])
+				end
+			end
+
+			if ~exist('verbosity')
+				verbosity = 0;
 			end
 
 			%% Algorithm %%
@@ -113,9 +129,43 @@ classdef IntermittentKalmanFilter
 					end
 
 				case 'CovarianceBound'
-					error('This part is not done yet.')
-			end
+					%Do step 0
+					[ xhat_t_t , P_t_t ] = obj.correction_update( M );
+					obj.xh_t_t = xhat_t_t;
+					obj.P_t_t = P_t_t;
 
+					P_history = [P_t_t];
+
+					%Update State
+					obj.DynamicalSystem.update_state();
+
+					%Iterate through every time step.
+					while all( eig( P_bound - P_history(:,:,end) ) >= 0 )
+						%Update internal filter time.
+						obj.t = obj.t+1;
+
+						%Perform Correction Step
+						[ xh_t_tm1 , P_t_tm1 ] = obj.time_update();
+						obj.xh_t_tm1 = xh_t_tm1;
+						obj.P_t_tm1 = P_t_tm1;
+
+						%Perform Time Update.
+						[ xhat_t_t , P_t_t ] = obj.correction_update(M);
+						obj.xh_t_t = xhat_t_t;
+						obj.P_t_t = P_t_t;
+
+						%Update State
+						obj.DynamicalSystem.update_state();
+
+						%Save P matrix
+						P_history(:,:,end+1) = P_t_t; 
+						
+					end
+
+					P_history = P_history(:,:,[1:end-1]);
+
+					T = obj.t-1;
+			end
 
 		end
 
