@@ -69,13 +69,13 @@ function [results] = ms_experiment1(varargin)
 	disp('3. Plotting the trajectory of one matrix.')
 
 	th = deg2rad(10);
-	A2 = [cos(th),-sin(th); sin(th), cos(th)];
+	A2 = 0.95*[cos(th),-sin(th); sin(th), cos(th)];
 
 	[Ap2,q] = get_vector_cov_dynamics(A2,Q1);
 
 	%Create the Path of the covariance
 	p0 = [1.7;0;1.7];
-	T = 10;
+	T = 500;
 	p = [p0];
 	for t = [1:T-1]
 		p = [p, Ap2*p(:,t)+q ];
@@ -83,19 +83,29 @@ function [results] = ms_experiment1(varargin)
 
 	%Create the set of PSD Matrices
 	diag_val = -10;
-	P_offset = 8*eye(dim);
+	bounding_diag_val = 12;
+	P_offset = bounding_diag_val*eye(dim);
 	p_bar = sdpvar(3,1,'full');
 	constr = [ [p_bar(1),p_bar(2);p_bar(2),p_bar(3)] <= P_offset ] + [ [p_bar(1),p_bar(2);p_bar(2),p_bar(3)] >= diag_val*eye(dim) ];
 	Y3 = YSet(p_bar,constr);
 
 	grid_n = 10;
+	lw0 = 2; %Default LineWidth = 0.5
 	figure;
 	hold;
-	scatter3(p(1,:),p(2,:),p(3,:),'rx','MarkerSize',20)
+	scatter3(p(1,:),p(2,:),p(3,:),'rx','LineWidth',lw0)
 	Y3.plot('Alpha',0.5,'Color','lightblue','linestyle','--','Grid',grid_n)
-	axis([ 	min([0,p(1,:)]) , max([10,p(1,:)]) , ...
-			min([0,p(2,:)]) , max([10,p(2,:)]) , ...
-			min([0,p(3,:)]) , max([10,p(3,:)]) ])
+	axis([ 	min([0,p(1,:)]) , max([bounding_diag_val+1,p(1,:)]) , ...
+	 		min([0,p(2,:)]) , max([bounding_diag_val+1,p(2,:)]) , ...
+	 		min([0,p(3,:)]) , max([bounding_diag_val+1,p(3,:)]) ])
+
+	set(gcf,'units','Normalized','Position',[0 0 1 1])
+	saveas(gcf,['results/experiment1/covariance_matrix_traj' ],'epsc')
+
+	savefig('results/experiment1/covariance_matrix_traj_fig')
+
+	view(0,90)
+	saveas(gcf,['results/experiment1/covariance_matrix_traj_view2' ],'epsc')
 
 	results.exp3.p = p;
 	results.exp3.T = T;

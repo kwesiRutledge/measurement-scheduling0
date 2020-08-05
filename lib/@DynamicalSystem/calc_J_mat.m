@@ -23,7 +23,7 @@ function [J] = calc_J_mat(obj,T)
 	%Creating matrix.
 	J = eye(obj.n_x);
 
-	for i = 1 : (T-1)
+	for i = 1 : T
 		J = [J; (A^i)];
 	end
 	

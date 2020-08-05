@@ -47,13 +47,15 @@ function [varargout] = get_mpc_matrices(varargin)
 	%% Input Processing %%
 	%%%%%%%%%%%%%%%%%%%%%%
 
-	if (nargin ~= 3)
+	if (nargin ~= [2,3])
 		error(['Inappropriate number of arguments. (Received ' num2str(nargin) ')'])
 	end
 
 	ds = varargin{1};
 	T  = varargin{2};
-	M  = varargin{3};
+	if nargin > 2
+		M  = varargin{3};
+	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	%% Defining the Matrices %%
@@ -63,24 +65,25 @@ function [varargout] = get_mpc_matrices(varargin)
 	S = ds.calc_w_effect_mat(T);
 	J = ds.calc_J_mat(T);
 	
-	%Calculate Big C Matrix
-	C_at_each_n = {};
-	for i = 1:T
-		C_at_each_n{i} = ds.C; 
-	end
+	varargout{1} = J;
+	varargout{2} = S;
 
-	C_bar = [ blkdiag(C_at_each_n{:}) zeros( [ds.n_y , ds.n_x] * [ T 0 ; 0 1 ] ) ];
 
 	%%%%%%%%%%%%%%%%%%%%%%
 	%% Optional Outputs %%
 	%%%%%%%%%%%%%%%%%%%%%%
 
-	%%%%%%%%%%%%%%%%%%%%
-	%% Create Outputs %%
-	%%%%%%%%%%%%%%%%%%%%
+	%Output Matrix	
+	if nargin > 2
+		%Calculate Big C Matrix
+		C_at_each_n = {};
+		for t = 0:T-1
+			C_at_each_n{t+1} = ds.C*( any(t == M) ); 
+		end
 
-	varargout{1} = J;
-	varargout{2} = S;
-	varargout{3} = C_bar;
+		C_bar = [ blkdiag(C_at_each_n{:}) zeros( [ds.n_y , ds.n_x] * [ T 0 ; 0 1 ] ) ];
+
+		varargout{3} = C_bar;
+	end
 
 end
