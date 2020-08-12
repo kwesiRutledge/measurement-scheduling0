@@ -86,7 +86,8 @@ function [results] = ms_experiment4(varargin)
 	Lambda = sdpvar( 2*dyn0.n_x*(T+1) , size(P_eta.A,1) , 'full' );
 
 	%Calculate Big C Matrix
-	b = binvar(T,1);
+	% clear C_bar
+	% b = binvar(T,1);
 	% C_at_each_n = {};
 	% for t = 0:T-1
 	% 	C_at_each_n{t+1} = dyn0.C*b(t+1); 
@@ -119,21 +120,21 @@ function [results] = ms_experiment4(varargin)
 
 	positivity_constr = [ Lambda >= 0 , alpha0 >= 0 ];
 
-	k0 = 2;
-	schedule_constr = [ sum( b ) <= k0 ];
+	k0 = 3;
+	% schedule_constr = [ sum( b ) <= k0 ];
 
 	%% Write Optimization Problem %%
 
-	ops0 = sdpsettings('verbose',1);
+	ops0 = sdpsettings('verbose',2);
 
-	diagnostics = optimize(	dual_constraints+low_diag_constr+positivity_constr+schedule_constr , ...
+	diagnostics = optimize(	dual_constraints+low_diag_constr+positivity_constr , ...
 							sum(alpha0), ...
 							ops0)
 
 	results.exp1.Q = value(Q);
 	results.exp1.r = value(r);
-	results.exp1.F = inv(eye( size(Q ,1)) + value(Q)*C_bar*S ) * value(Q);
-	results.exp1.f = inv(eye( size(Q ,1)) + value(Q)*C_bar*S ) * value(r);
+	results.exp1.F = inv(eye( size(Q ,1)) + value(Q)*value(C_bar)*S ) * value(Q);
+	results.exp1.f = inv(eye( size(Q ,1)) + value(Q)*value(C_bar)*S ) * value(r);
 	results.exp1.alpha0 = value(alpha0);
 	results.exp1.objective = sum(value(alpha0));
 

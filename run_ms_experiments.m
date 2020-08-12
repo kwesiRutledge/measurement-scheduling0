@@ -12,7 +12,7 @@ function [results] = run_experiments( varargin )
 		addpath('./experiments/')
 	end
 
-	add_libraries('tbxmanager')
+	add_libraries('tbxmanager','gurobi')
 
 	%% Constants
 	base_name = 'ms_experiment';

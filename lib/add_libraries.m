@@ -48,6 +48,21 @@ if strcmp(getenv('USER'),'kwesirutledge') %Suggests the laptop is in use
                 catch
                     error('tbxmanager was not added to path.')
                 end
+                
+            case 'gurobi'
+                if (exist('gurobi.m') == 2 )
+                    %Gurobi is already on the path continue
+                    disp('gurobi.m exists!')
+                    1;
+                else
+                    addpath(genpath('/Library/gurobi811/mac64/matlab/'))
+                    %Try to find it again
+                    if exist('gurobi.m') ~= 2
+                        %If the gurobi function still cannot be found,
+                        %then produce an error.
+                        error('gurobi is still not on path!')
+                    end
+                end
 
             otherwise
                 error(['The toolbox name that you provided ' varargin{arg_ind} ' is not a valid library/toolbox. ' ])

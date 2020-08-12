@@ -8,6 +8,7 @@ function [varargout] = get_mpc_matrices(varargin)
 	%
 	%	Usage:
 	%		[J,S,C_bar] = get_mpc_matrices(ds,T,M)
+	%		[J,S,C_bar] = ds.get_mpc_matrices(T,M)
 	%
 	%	Inputs:
 	%		sys_arr - 	An array of structs, each containing system matrices and an initial 
