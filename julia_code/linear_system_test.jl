@@ -37,7 +37,7 @@ end;
     @test !check(system3)
 end
 
-@testset "n_x() Tests" begin
+@testset "x_dim() Tests" begin
      #Test1: Bad A Matrix
      A = [1 0; 0 2; 0 3]
      B = [1;1]
@@ -47,15 +47,15 @@ end
  
      #Create System 1
      system1 = LinearSystem(A,B,C,eta_w,eta_v)
-     @test_throws ArgumentError n_x(system1)
+     @test_throws ArgumentError x_dim(system1)
 
      #Test2
      A = [1 0; 0 3]
      system2 = LinearSystem(A,B,C,eta_w,eta_v)
-     @test n_x(system2) == 2
+     @test x_dim(system2) == 2
 end
 
-@testset "n_y() Tests" begin
+@testset "y_dim() Tests" begin
      #Test1: Bad A Matrix
      A = [1 0; 0 2; 0 3]
      B = [1;1]
@@ -65,22 +65,42 @@ end
  
      #Create System 1
      system1 = LinearSystem(A,B,C,eta_w,eta_v)
-     @test_throws ArgumentError n_y(system1)
+     @test_throws ArgumentError y_dim(system1)
 
      #Test2
      A = [1 0; 0 3]
      system2 = LinearSystem(A,B,C,eta_w,eta_v)
-     @test n_y(system2) == 1
+     @test y_dim(system2) == 1
 
     #Test3
     C = [1 0 0]
     system3 = LinearSystem(A,B,C,eta_w,eta_v)
-    @test_throws ArgumentError n_y(system3)
+    @test_throws ArgumentError y_dim(system3)
 
     #Test4
     C = [1 0;2 2;3 1]
     system4 = LinearSystem(A,B,C,eta_w,eta_v)
-    @test n_y(system4) == 3
+    @test y_dim(system4) == 3
+end
+
+@testset "define_simple_eta_HPolytope() Tests" begin
+    #Test 1: Simple 1d system 
+    A = 3
+    B = 7
+    C = 1
+    eta_w = 0.1
+    eta_v = 0.5
+
+    #Create system1
+    system1 = LinearSystem(A,B,C,eta_w,eta_v)
+    eta_x0 = 0.2
+    T1 = 1
+    H_eta1, h_eta1 = define_simple_eta_HPolytope(system1,eta_x0,T1)
+    println(h_eta1)
+    println(transpose(transpose([ 0.1; 0.1 ; 0.5; 0.5; 0.2; 0.2 ]) ) )
+    @test H_eta1 == [1.0 0 0;-1 0 0; 0 1 0; 0 -1 0; 0 0 1; 0 0 -1 ]
+    @test transpose(h_eta1) == transpose([0.1; 0.1 ; 0.5; 0.5; 0.2; 0.2])
+
 end
 
 @testset "find_ALAP_time_from_X0_to_bound Tests" begin
