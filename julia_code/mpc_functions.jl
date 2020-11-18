@@ -38,7 +38,7 @@ end
         This assumes that the initial time in the trajectory is t=0 and the input T 
         is a scalar defining the final time in the time horizon.
 """
-function compute_Sw( A , T )
+function compute_Sw( A::Array{T,2} , TimeHorizon )
     #Compute dimension constants
     n_x,n_test=size(A)
     if n_x ≠ n_test
@@ -46,13 +46,28 @@ function compute_Sw( A , T )
     end
 
     #Algorithm
-    S = zeros(n_x*(T+1),n_x*T)
-    current_row = one(A)
+    S = zeros(n_x*(TimeHorizon+1),n_x*TimeHorizon)
+    current_row = I( size(A) )
     S[n_x+1:2*n_x,1:n_x] = current_row
-    for i = 1:T-1
+    for i = 1:TimeHorizon-1
         current_row = [A*current_row[1:n_x,1:n_x] current_row]
         S[(i+1)*n_x+1:(i+2)*n_x, 1:(i+1)*n_x] = current_row
     end
+    return S
+end
+
+function compute_Sw( A::Number , TimeHorizon )
+    #This should be a scalar/
+
+    #Algorithm
+    S = zeros(TimeHorizon+1,TimeHorizon)
+    S[2,1] = 1
+    current_row = [1]
+    for i = 1:TimeHorizon-1
+        current_row = [A*current_row[1] current_row]
+        S[(i+1)+1:(i+2), 1:(i+1)] = current_row
+    end
+    println(S)
     return S
 end
 

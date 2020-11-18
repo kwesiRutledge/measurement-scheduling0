@@ -162,3 +162,51 @@ function find_ALAP_time_from_X0_to_bound( system_in::LinearSystem, eta_x0 , boun
     end
 
 end
+
+"""
+    find_est_error_bound_from_time_0_to_T
+    Description:
+        Finds the bound B which bounds all estimation error values between time t=0
+        and time T.
+"""
+function find_est_error_bound_from_time_0_to_T( system_in , T , eta_x0 )
+
+    #Define Constants
+    model = Model(Gurobi.Optimizer) # Create Optimization model
+    H_eta, h_eta = define_simple_eta_HPolytope( system_in , eta_x0 , T ) # Create Eta Polyhedron (Polyhedron of all disturbances over time horizon)
+    n_Heta = size(H_eta,1)
+
+    n_x = x_dim(system_in)
+    n_y = y_dim(system_in)
+
+    S = compute_Sw( system_in.A , T )
+    # C_bar = compute_C_M( system_in.C , [T-1] , T )
+    J = compute_Sx0( system_in.A , T)
+
+    R_T = [zeros(n_x,T*n_x) I(n_x)]
+
+    #Create the Optimization Variables
+    @variable(model,alpha0)
+    @variable(model,Lambda[1:2*n_x,1:n_Heta])
+
+    # Create Constraints
+    @constraint(model,alpha0.>=0)
+    @constraint(model,Lambda.>=zeros(size(Lambda)))
+
+    LHS1 = Lambda * H_eta
+    RHS1 = [I(n_x); -I(n_x)] * R_T * [ S  zeros(size(S,1),n_y*T) J ]
+    @constraint(model, LHS1 .== RHS1 )
+
+    LHS2 = Lambda * h_eta
+    RHS2 = alpha0*ones(2*n_x,1)
+    @constraint(model, LHS2 .<= RHS2)
+
+    # Create objective
+    @objective(model, Min, alpha0)
+
+    #Optimize!
+    optimize!(model)
+
+    return termination_status(model) , objective_value(model)
+
+end

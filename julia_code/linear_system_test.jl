@@ -96,8 +96,6 @@ end
     eta_x0 = 0.2
     T1 = 1
     H_eta1, h_eta1 = define_simple_eta_HPolytope(system1,eta_x0,T1)
-    println(h_eta1)
-    println(transpose(transpose([ 0.1; 0.1 ; 0.5; 0.5; 0.2; 0.2 ]) ) )
     @test H_eta1 == [1.0 0 0;-1 0 0; 0 1 0; 0 -1 0; 0 0 1; 0 0 -1 ]
     @test transpose(h_eta1) == transpose([0.1; 0.1 ; 0.5; 0.5; 0.2; 0.2])
 
@@ -106,4 +104,23 @@ end
 @testset "find_ALAP_time_from_X0_to_bound Tests" begin
     #Test the error handling
     @test_throws MethodError find_ALAP_time_from_X0_to_bound(1)
+end
+
+@testset "find_est_error_bound_from_time_0_to_T Tests" begin
+    #Test with simple scalar system
+    A = 1
+    B = 1
+    C = 1
+    eta_w = 0.1
+    eta_v = 0.5
+
+    #Create system1
+    system1 = LinearSystem(A,B,C,eta_w,eta_v)
+    eta_x0 = 0.2
+    T1 = 1
+
+    out1 = find_est_error_bound_from_time_0_to_T(system1, T , eta_x0)
+    feasibilityflag1 = out1[0]
+    opt_val1 = out1[1]
+    @test opt_val1 == eta_x0+eta_w 
 end

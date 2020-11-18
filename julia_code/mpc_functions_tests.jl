@@ -12,6 +12,11 @@ end;
     #Test what happens for time horizon 1
     @test compute_Sw(A,1) == [0.0 0; 0 0; 1 0 ; 0 1]
     @test compute_Sw(A,2) == [0.0 0 0 0; 0 0 0 0; 1 0 0 0; 0 1 0 0; 1 0 1 0; 0 2 0 1 ]
+
+    A = 2.0
+    #Test what happens for time horizons 1 and 2 with scalar A 
+    @test transpose(compute_Sw(A,1)) == transpose([0.0 ; 1.0])
+    @test compute_Sw(A,2) == [0.0 0.0; 1.0 0.0 ; 2 1 ]
 end;
 
 @testset "compute_C_M() Function Tests" begin
