@@ -164,12 +164,62 @@ function find_ALAP_time_from_X0_to_bound( system_in::LinearSystem, eta_x0 , boun
 end
 
 """
+    get_alap_estimation_schedule
+    Description:
+        Uses one of a variety of methods to find an ALAP schedule.
+"""
+function get_alap_estimation_schedule( system_in , TimeHorizon , MeasurementBudget , method_number::Int )
+
+
+
+end
+
+"""
+    alap_estimation_schedule_alg1
+    Description:
+        This algorithm takes the time horizon, divides it into |M|+1 intervals.
+        It is agnostic of the system and is strictly based on the numbers provided.
+    Inputs:
+        TimeHorizon - An integer representing the final time instant of the problem.
+        MeasurementBudget - An integer representing the number of measurements that the estimator
+                            can take during the time [0,TimeHorizon-1].
+"""
+function alap_estimation_schedule_alg1( TimeHorizon , MeasurementBudget )
+
+    # Equally Divide the Time Horizon Up Into M+1 blocks of length TimeChunk (if possible)
+    FloatTimeChunk = TimeHorizon / (MeasurementBudget+1)
+    IntTimeChunk = floor(FloatTimeChunk);
+
+    M = []
+
+    if IntTimeChunk == FloatTimeChunk
+        # If there are exactly MeasurementBudget+1 windows of length IntTimeChunk,
+        # then the measurement times are straight forward:
+        for M_idx = 1:MeasurementBudget
+            append!(M,Int(M_idx*IntTimeChunk) )
+        end
+
+    else
+        # If there aren't exactly MeasurementBudget+1 windows of length IntTimeChunk,
+        # then use a small window initially before doing periodic chunks.
+        initialChunk = rem(TimeHorizon,MeasurementBudget+1)
+        append!(M,Int( initialChunk ))
+        for M_idx = 2:MeasurementBudget
+            append!(M,Int(initialChunk + (M_idx-1)*IntTimeChunk) )
+        end
+    end
+
+    return M
+
+end
+
+"""
     find_est_error_bound_from_time_0_to_T
     Description:
         Finds the bound B which bounds all estimation error values between time t=0
         and time T.
 """
-function find_est_error_bound_from_time_0_to_T( system_in , T , eta_x0 )
+function find_est_error_bound_from_time_0_to_T( system_in::LinearSystem , T::Int , eta_x0 )
 
     #Define Constants
     model = Model(Gurobi.Optimizer) # Create Optimization model
@@ -183,7 +233,7 @@ function find_est_error_bound_from_time_0_to_T( system_in , T , eta_x0 )
     # C_bar = compute_C_M( system_in.C , [T-1] , T )
     J = compute_Sx0( system_in.A , T)
 
-    R_T = [zeros(n_x,T*n_x) I(n_x)]
+    R_T = Matrix{Float64}([zeros(n_x,T*n_x) I(n_x)])
 
     #Create the Optimization Variables
     @variable(model,alpha0)
@@ -194,6 +244,12 @@ function find_est_error_bound_from_time_0_to_T( system_in , T , eta_x0 )
     @constraint(model,Lambda.>=zeros(size(Lambda)))
 
     LHS1 = Lambda * H_eta
+    # println(typeof(S))
+    # println(typeof(J))
+    # println(typeof([ S  zeros(size(S,1),n_y*T) J ]))
+    # println(S)
+    # println(typeof(R_T))
+    # println( R_T*[ S  zeros(size(S,1),n_y*T) J ] )
     RHS1 = [I(n_x); -I(n_x)] * R_T * [ S  zeros(size(S,1),n_y*T) J ]
     @constraint(model, LHS1 .== RHS1 )
 
@@ -205,6 +261,7 @@ function find_est_error_bound_from_time_0_to_T( system_in , T , eta_x0 )
     @objective(model, Min, alpha0)
 
     #Optimize!
+    set_silent(model)
     optimize!(model)
 
     return termination_status(model) , objective_value(model)

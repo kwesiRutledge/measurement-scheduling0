@@ -108,7 +108,7 @@ end
 
 @testset "find_est_error_bound_from_time_0_to_T Tests" begin
     #Test with simple scalar system
-    A = 1
+    A = 1.0
     B = 1
     C = 1
     eta_w = 0.1
@@ -119,8 +119,17 @@ end
     eta_x0 = 0.2
     T1 = 1
 
-    out1 = find_est_error_bound_from_time_0_to_T(system1, T , eta_x0)
-    feasibilityflag1 = out1[0]
-    opt_val1 = out1[1]
+    out1 = find_est_error_bound_from_time_0_to_T(system1, T1 , eta_x0)
+    feasibilityflag1 = out1[1]
+    opt_val1 = out1[2]
     @test opt_val1 == eta_x0+eta_w 
+end
+
+@testset "alap_estimation_schedule_alg1 Tests" begin
+    # Test with nice Time Horizon and MeasurementBudget values.
+    T = 12
+    B = 3
+
+    schedule1 = alap_estimation_schedule_alg1(T,B) #This should be the values [3,6,9]
+    @test [3,6,9] == schedule1
 end
