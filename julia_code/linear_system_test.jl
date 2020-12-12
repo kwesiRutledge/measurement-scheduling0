@@ -53,6 +53,16 @@ end
      A = [1 0; 0 3]
      system2 = LinearSystem(A,B,C,eta_w,eta_v)
      @test x_dim(system2) == 2
+
+     # Test 3: One Dimensional System
+     A = 7
+     B = 5
+     C = 3
+     eta_w = 1.0
+     eta_v = 1.0
+
+     system3 = LinearSystem(A,B,C,eta_w,eta_v)
+     @test x_dim(system3) == 1
 end
 
 @testset "y_dim() Tests" begin
@@ -101,11 +111,6 @@ end
 
 end
 
-@testset "find_ALAP_time_from_X0_to_bound Tests" begin
-    #Test the error handling
-    @test_throws MethodError find_ALAP_time_from_X0_to_bound(1)
-end
-
 @testset "find_est_error_bound_from_time_0_to_T Tests" begin
     #Test with simple scalar system
     A = 1.0
@@ -125,11 +130,19 @@ end
     @test opt_val1 == eta_x0+eta_w 
 end
 
-@testset "alap_estimation_schedule_alg1 Tests" begin
-    # Test with nice Time Horizon and MeasurementBudget values.
-    T = 12
-    B = 3
+@testset "evaluate_schedule_wrt Tests" begin
+    #Test with simple scalar system
+    A = 1.0
+    B = 1
+    C = 1
+    eta_w = 0.1
+    eta_v = 0.5
 
-    schedule1 = alap_estimation_schedule_alg1(T,B) #This should be the values [3,6,9]
-    @test [3,6,9] == schedule1
+    #Create system1
+    system1 = LinearSystem(A,B,C,eta_w,eta_v)
+    eta_x0 = 0.2
+    T1 = 1
+
+
+
 end

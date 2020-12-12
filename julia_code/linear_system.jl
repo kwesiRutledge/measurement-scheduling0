@@ -118,102 +118,6 @@ function define_simple_eta_HPolytope( system_in::LinearSystem , eta_x0 , T_Horiz
 end
 
 """
-    find_ALAP_time_from_X0_to_Bound
-    Description:
-        Identifies the amount of time it takes for the 
-"""
-function find_ALAP_time_from_X0_to_bound( system_in::LinearSystem, eta_x0 , bound_in ; iterLimit=10 )
-    #Constants
-    dim_x = n_x(system_in)
-    dim_y = n_y(system_in)
-
-    model = Model(Gurobi.Optimizer)
-
-    #Start the Loop on time horizon T 
-    for T = 1:iterLimit
-
-        #Clear the model?
-        empty!(model)
-
-        #Create the Optimization Variables
-        @variable(model,Q[1:n_x*T,1:n_x*T])
-        @variable(model,r[1:n_x*T,1])
-        @variable(model,Lambda[1:2*n_x*(T+1),1:T*(n_w+n_v)+n_x0])
-        @variable(model,alpha0[1:T+1,1])
-
-        #Constraints
-        @constraint(model,alpha0.>=0)
-        @constraint(model,Lambda.>=zeros(size(Lambda)))
-
-        S = compute_Sw( system_in.A , T )
-        C_bar = compute_C_M( system_in.C , [T-1] , T )
-        J = compute_Sx0( system_in.A , T)
-
-        P_xi_w = S + S*Q*C_bar*S
-        P_xi_v = S * Q 
-        P_xi_xi0 = ( I + S*Q*C_bar)*J
-
-        R_T_mT = [ I ; -Matrix(1I, n_x*(T+1), n_x*(T+1)) ]
-
-        #Optimize!
-        optimize!(model)
-
-        print("termination_status = $(termination_status(model))\n")
-    end
-
-end
-
-"""
-    get_alap_estimation_schedule
-    Description:
-        Uses one of a variety of methods to find an ALAP schedule.
-"""
-function get_alap_estimation_schedule( system_in , TimeHorizon , MeasurementBudget , method_number::Int )
-
-
-
-end
-
-"""
-    alap_estimation_schedule_alg1
-    Description:
-        This algorithm takes the time horizon, divides it into |M|+1 intervals.
-        It is agnostic of the system and is strictly based on the numbers provided.
-    Inputs:
-        TimeHorizon - An integer representing the final time instant of the problem.
-        MeasurementBudget - An integer representing the number of measurements that the estimator
-                            can take during the time [0,TimeHorizon-1].
-"""
-function alap_estimation_schedule_alg1( TimeHorizon , MeasurementBudget )
-
-    # Equally Divide the Time Horizon Up Into M+1 blocks of length TimeChunk (if possible)
-    FloatTimeChunk = TimeHorizon / (MeasurementBudget+1)
-    IntTimeChunk = floor(FloatTimeChunk);
-
-    M = []
-
-    if IntTimeChunk == FloatTimeChunk
-        # If there are exactly MeasurementBudget+1 windows of length IntTimeChunk,
-        # then the measurement times are straight forward:
-        for M_idx = 1:MeasurementBudget
-            append!(M,Int(M_idx*IntTimeChunk) )
-        end
-
-    else
-        # If there aren't exactly MeasurementBudget+1 windows of length IntTimeChunk,
-        # then use a small window initially before doing periodic chunks.
-        initialChunk = rem(TimeHorizon,MeasurementBudget+1)
-        append!(M,Int( initialChunk ))
-        for M_idx = 2:MeasurementBudget
-            append!(M,Int(initialChunk + (M_idx-1)*IntTimeChunk) )
-        end
-    end
-
-    return M
-
-end
-
-"""
     find_est_error_bound_from_time_0_to_T
     Description:
         Finds the bound B which bounds all estimation error values between time t=0
@@ -265,5 +169,58 @@ function find_est_error_bound_from_time_0_to_T( system_in::LinearSystem , T::Int
     optimize!(model)
 
     return termination_status(model) , objective_value(model)
+
+end
+
+"""
+    evaluate_schedule_wrt_objective
+    Description:
+        Evaluates the schedule with respect to (i) a desired linear system, (ii) the schedule
+        (iii) the time horizon, and (iv) one of several objectives including:
+            1 - Maximum Estimation error
+            2 - Sum of the Estimation Error bounds at each time
+        
+"""
+function evaluate_schedule_wrt( system_in::LinearSystem , shedule_in , time_horizon_in , objective_flag::Int )
+
+    # Input Processing
+
+    if !check( system_in )
+        throw(ArgumentError("The input LinearSystem is not valid. Please check its dimensions."))
+    end
+
+    for schedule_val in schedule_in
+        if schedule_val > time_horizon_in
+            throw(ArgumentError("The schedule given contains times which are outside of the time horizon! (" + str(schedule_val) + ")" ))
+        end
+    end
+
+    # Objective 2
+
+    #Clear the model?
+    empty!(model)
+
+    #Create the Optimization Variables
+    @variable(model,Lambda[1:2*n_x*(T+1),1:T*(n_w+n_v)+n_x0])
+    @variable(model,alpha0[1:T+1,1])
+
+    #Constraints
+    @constraint(model,alpha0.>=0)
+    @constraint(model,Lambda.>=zeros(size(Lambda)))
+
+    S = compute_Sw( system_in.A , T )
+    C_bar = compute_C_M( system_in.C , [T-1] , T )
+    J = compute_Sx0( system_in.A , T)
+
+    P_xi_w = S + S*Q*C_bar*S
+    P_xi_v = S * Q 
+    P_xi_xi0 = ( I + S*Q*C_bar)*J
+
+    R_T_mT = [ I ; -Matrix(1I, n_x*(T+1), n_x*(T+1)) ]
+
+    #Optimize!
+    optimize!(model)
+
+    print("termination_status = $(termination_status(model))\n")
 
 end
