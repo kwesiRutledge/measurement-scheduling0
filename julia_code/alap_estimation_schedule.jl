@@ -10,6 +10,8 @@
     Description:
         Returns the estimation error for the system (in terms of infinity norm) after 
         T time steps for the input system system_in.
+    Usage:
+        objective_val , termination_status = norm_of_est_error_after( T , ls0 , eta_x0 )
 """
 function norm_of_est_error_after( time_horizon_in::Int , system_in::LinearSystem , x0_description )
     
@@ -24,13 +26,15 @@ function norm_of_est_error_after( time_horizon_in::Int , system_in::LinearSystem
         eta_x0 = x0_description 
     end
 
-    #Constants
+    # Constants
+
     n_x = x_dim( system_in )
     n_y = y_dim( system_in )
 
     model = Model(Gurobi.Optimizer)
 
     # Define Disturbance Polytope
+
     H_eta, h_eta = define_simple_eta_HPolytope( system_in , eta_x0 , time_horizon_in ) # Create Eta Polyhedron (Polyhedron of all disturbances over time horizon)
     n_Heta = size(H_eta,1)
 
@@ -60,10 +64,10 @@ function norm_of_est_error_after( time_horizon_in::Int , system_in::LinearSystem
     @constraint(model, LHS2 .<= RHS2)
 
     # Create Objective
-    set_silent(model)
     @objective(model,Min,alpha0)
 
     #Optimize!
+    set_silent(model)
     optimize!(model)
 
     print("termination_status = $(termination_status(model))\n")
@@ -73,16 +77,18 @@ function norm_of_est_error_after( time_horizon_in::Int , system_in::LinearSystem
 end
 
 """
-    find_time_from_X0_to_Bound
+    find_time_from_X0_to_bound
     Description:
         Identifies the amount of time it takes for the system to reach a bound bound_in.
+    Usage:
+        T_star = find_time_from_X0_to_bound( ls0 , eta_x0 , bound_in )
 """
 function find_time_from_X0_to_bound( system_in::LinearSystem, eta_x0 , bound_in ; iterLimit=10 )
     #Constants
-    dim_x = n_x(system_in)
-    dim_y = n_y(system_in)
+    dim_x = x_dim(system_in)
+    dim_y = y_dim(system_in)
 
-    model = Model(Gurobi.Optimizer)
+    # model = Model(Gurobi.Optimizer)
 
     # Define Disturbance Polytope
     H_eta, h_eta = define_simple_eta_HPolytope( system_in , eta_x0 , T ) # Create Eta Polyhedron (Polyhedron of all disturbances over time horizon)
@@ -91,38 +97,15 @@ function find_time_from_X0_to_bound( system_in::LinearSystem, eta_x0 , bound_in 
     #Start the Loop on time horizon T 
     for T = 1:iterLimit
 
-        #Clear the model?
-        empty!(model)
+        obj_val0 , term_status0 = norm_of_est_error_after( T , system_in , eta_x0 )
 
-        #Create the Optimization Variables
-        @variable(model,Lambda[1:2*n_x,1:n_Heta])
-
-        #Constraints
-        @constraint(model,Lambda.>=0)
-
-        S = compute_Sw( system_in.A , T )
-        C_bar = compute_C_M( system_in.C , [T-1] , T )
-        J = compute_Sx0( system_in.A , T)
-
-        P_xi_w = S + S*Q*C_bar*S
-        P_xi_v = S * Q 
-        P_xi_xi0 = ( I + S*Q*C_bar)*J
-
-        R_T = [ zeros(dim_x*T,dim_x) I(dim_x) ]
-
-        LHS1 = Lambda * H_eta
-        RHS1 = [I(n_x); -I(n_x)] * R_T * [ S  zeros(size(S,1),n_y*T) J ]
-        @constraint(model,LHS1 .== RHS1 )
-
-        LHS2 = Lambda * h_eta
-        RHS2 = bound_in*ones(2*n_x,1)
-        @constraint(model, LHS2 .<= RHS2)
-
-        #Optimize!
-        optimize!(model)
-
-        print("termination_status = $(termination_status(model))\n")
+        if obj_val0 > bound_in
+            return T-1
+        end
+        
     end
+
+    return -1
 
 end
 
