@@ -173,15 +173,18 @@ function find_est_error_bound_from_time_0_to_T( system_in::LinearSystem , T::Int
 end
 
 """
-    evaluate_schedule_wrt_objective
+    evaluate_schedule_wrt
     Description:
         Evaluates the schedule with respect to (i) a desired linear system, (ii) the schedule
         (iii) the time horizon, and (iv) one of several objectives including:
-            1 - Maximum Estimation error
+            1 - Maximum Infinity Norm of Estimation error 
             2 - Sum of the Estimation Error bounds at each time
+    Usage:
+        obj_val0 , feas_flag0 = evaluate_schedule_wrt( ls0, schedule0 , T0 , 1 , eta_x0 )
+        
         
 """
-function evaluate_schedule_wrt( system_in::LinearSystem , shedule_in , time_horizon_in , objective_flag::Int )
+function evaluate_schedule_wrt( system_in::LinearSystem , schedule_in , time_horizon_in , objective_flag::Int , x0_description )
 
     # Input Processing
 
@@ -195,32 +198,89 @@ function evaluate_schedule_wrt( system_in::LinearSystem , shedule_in , time_hori
         end
     end
 
-    # Objective 2
+    expected_objective_flag_range = (1,2)
+
+    if (objective_flag < expected_objective_flag_range[1]) | (objective_flag > expected_objective_flag_range[2])
+        throw(ArgumentError("The input objective_flag is not in the desired range $(expected_objective_flag_range).\n"))
+    end 
+
+    # Constants
+
+    eta_x0 = x0_description #Fix this later when eta_description becomes a polytope?
+    H_eta, h_eta = define_simple_eta_HPolytope( system_in , eta_x0 , time_horizon_in ) # Create Eta Polyhedron (Polyhedron of all disturbances over time horizon)
+    n_Heta = size(H_eta,1)
+
+    n_x = x_dim(system_in)
+    n_y = y_dim(system_in)
 
     #Clear the model?
     empty!(model)
 
     #Create the Optimization Variables
-    @variable(model,Lambda[1:2*n_x*(T+1),1:T*(n_w+n_v)+n_x0])
-    @variable(model,alpha0[1:T+1,1])
+    @variable(model,Q[1:n_x*time_horizon_in,1:n_y*time_horizon_in])
+    @variable(model,alpha0[1:time_horizon_in+1,1])
+    @variable(model,alpha1)
 
     #Constraints
     @constraint(model,alpha0.>=0)
-    @constraint(model,Lambda.>=zeros(size(Lambda)))
+    @constraint(model,alpha1.>=0)
 
-    S = compute_Sw( system_in.A , T )
-    C_bar = compute_C_M( system_in.C , [T-1] , T )
-    J = compute_Sx0( system_in.A , T)
+    S = compute_Sw( system_in.A , time_horizon_in )
+    C_bar = compute_C_M( system_in.C , schedule_in , time_horizon_in )
+    J = compute_Sx0( system_in.A , time_horizon_in)
 
     P_xi_w = S + S*Q*C_bar*S
     P_xi_v = S * Q 
     P_xi_xi0 = ( I + S*Q*C_bar)*J
+    P_xiTilde = 0
 
-    R_T_mT = [ I ; -Matrix(1I, n_x*(T+1), n_x*(T+1)) ]
+    R_T_mT = [ I ; -Matrix(1I, n_x*(time_horizon_in+1), n_x*(time_horizon_in+1)) ]
+    
+    R_0_T = I( n_x*(time_horizon_in+1) )
+    R_T = [ zeros(n_x,n_x*time_horizon_in) I(n_x) ]
 
-    #Optimize!
+    if objective_flag == 1 #Maximum Estimation Error Bound Objective
+        #
+        @variable(model,Lambda[1:2*n_x*(time_horizon_in+1),1:n_Heta])
+        @constraint(model,Lambda.>=zeros(size(Lambda)))
+
+        LHS1 = Lambda * H_eta
+        RHS1 = [I(n_x*(time_horizon_in+1)) ; -I(n_x*(time_horizon_in+1))] * R_0_T * [ P_xi_w P_xi_v P_xi_xi0 ]
+        @constraint(model, LHS1 .== RHS1 )
+
+        LHS2 = Lambda * h_eta
+        RHS2 = alpha1 * ones(2*n_x*(time_horizon_in+1),1)
+        @constraint(model, LHS2 .<= RHS2)
+
+    elseif objective_flag == 2 #Sum of estimation error bounds at each time steps
+
+        # Variable Definitions
+        @variable(model,Lambda[1:2*n_x*(time_horizon_in+1),1:n_Heta])
+        @constraint(model,Lambda.>=zeros(size(Lambda)))
+
+        LHS1 = Lambda * H_eta
+        RHS1 = [I(n_x*(time_horizon_in+1)) ; -I(n_x*(time_horizon_in+1))] * R_0_T * [ P_xi_w P_xi_v P_xi_xi0 ]
+        @constraint(model, LHS1 .== RHS1 )
+
+        LHS2 = Lambda * h_eta
+        RHS2 = kron(alpha0,ones(2*n_x))
+        @constraint(model, LHS2 .<= RHS2)
+
+    end
+
+    # Define Objective
+
+    if objective_flag == 1
+        @objective(model,Min,alpha1)
+    elseif objective_flag == 2
+        @objective(model,Min,sum(alpha0))
+    end
+
+    # Optimize!
     optimize!(model)
 
     print("termination_status = $(termination_status(model))\n")
+
+    return objective_value(model) , termination_status(model)
 
 end

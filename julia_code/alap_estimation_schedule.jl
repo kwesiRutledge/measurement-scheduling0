@@ -102,7 +102,7 @@ function find_time_from_X0_to_bound( system_in::LinearSystem, eta_x0 , bound_in 
         if obj_val0 > bound_in
             return T-1
         end
-        
+
     end
 
     return -1
@@ -134,27 +134,14 @@ function alap_estimation_schedule_alg1( TimeHorizon , MeasurementBudget )
 
     # Equally Divide the Time Horizon Up Into M+1 blocks of length TimeChunk (if possible)
     FloatTimeChunk = TimeHorizon / (MeasurementBudget+1)
-    IntTimeChunk = floor(FloatTimeChunk);
+    IntTimeChunk = ceil(FloatTimeChunk);
 
     M = []
 
-    if IntTimeChunk == FloatTimeChunk
-        # If there are exactly MeasurementBudget+1 windows of length IntTimeChunk,
-        # then the measurement times are straight forward:
-        for M_idx = 1:MeasurementBudget
-            append!(M,Int(M_idx*IntTimeChunk) )
-        end
-
-    else
-        # If there aren't exactly MeasurementBudget+1 windows of length IntTimeChunk,
-        # then use a small window initially before doing periodic chunks.
-        initialChunk = rem(TimeHorizon,MeasurementBudget+1)
-        append!(M,Int( initialChunk ))
-        for M_idx = 2:MeasurementBudget
-            append!(M,Int(initialChunk + (M_idx-1)*IntTimeChunk) )
-        end
+    for M_idx = 1:MeasurementBudget
+        append!(M,TimeHorizon - Int(M_idx*IntTimeChunk) )
     end
 
-    return M
+    return reverse(M)
 
 end

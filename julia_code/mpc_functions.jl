@@ -91,7 +91,7 @@ end
 
     Assumptions:
 """
-function compute_C_M( C , M , T)
+function compute_C_M( C::Matrix{<:Number} , M , T)
     #Compute Dimension constants
     n_y,n_x=size(C)
 
@@ -102,6 +102,20 @@ function compute_C_M( C , M , T)
     dMat=Diagonal(diag)
     C_sched=[kron(dMat,C) zeros(n_y*T,n_x)]
 
+    #Return C matrix
+    return C_sched
+end
+
+function compute_C_M( C::Number , M , T )
+    #C has dimensions 1 x 1 since it is a scalar.
+    
+    # construct C_sched (=C_bar)
+    M=M.+1 # to have indices
+    diag=zeros(T)
+    diag[M].=C
+    dMat = Diagonal(diag)
+    C_sched=[dMat zeros(T,1)]
+ 
     #Return C matrix
     return C_sched
 end
