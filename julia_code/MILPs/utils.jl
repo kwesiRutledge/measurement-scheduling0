@@ -1,6 +1,9 @@
 using Polyhedra
 using JuMP
 using LinearAlgebra
+using Gurobi #, Cbc, GLPK
+
+BigM=1e3
 
 function hypercube(n_dims)
     halfSpaces=Array{HalfSpace{Float64,Array{Float64,1}}}(undef, 2*n_dims)
@@ -46,8 +49,43 @@ function etaPolyhedra(polW,polV,polX0,T) # could be faster
 end
 
 
-function instantiateASAP(A,B,C,k,N_m,N_c,T)
-    BigM=1e5
+function simulateTrajectories(A,B,C,k,F,f;numberSamples=1)
+    # Works only if all polyhedra (except S) are hypercubes
+    n_y,n_x=size(C)
+    T=size(f)[2]
+    
+    x=zeros(numberSamples,n_x,T+1)
+    for i=1:numberSamples
+        y=zeros(n_y,T)
+        x[i,:,0+1]=rand(Float64,n_x)*2 .-1 # x_0
+        for t=0:T-1
+            # compute y
+            v=rand(Float64,n_y)*2 .-1
+            y[:,t+1]=C*x[i,:,t+1]+v
+
+            # compute u
+            u=f[:,t+1]
+            for tau=0:t
+                u+=F[:,:,t+1,tau+1]*y[:,tau+1]
+            end
+
+            # compute x
+            w=rand(Float64,n_x)*2 .-1
+            x[i,:,t+2]=A*x[i,:,t+1]+B*u+k+w
+        end
+    end
+    return x
+end
+
+
+
+
+# ASAP functions
+
+function instantiateASAP(A,B,C,k,N_m,N_c,T;enforceRegular=false)
+    """
+    If enforceRegular, sigma[t]=1 for Round( t=k*(T-1)/(N-1) ), t=0,...,N-1. Or t=Round( (T-1)/2 ) if N=1.
+    """
     
     n_y,n_x=size(C)
     _,n_u=size(B)
@@ -113,6 +151,8 @@ function instantiateASAP(A,B,C,k,N_m,N_c,T)
     P_x_w=H+S*Q*C_bar*H
     P_x_v=S*Q*N
     P_x_x0=( Matrix(I,n_x*(T+1),n_x*(T+1)) + S*Q*C_bar )*J
+    P_x_all=[P_x_w P_x_v P_x_x0]
+    
     x_tilde=(Matrix(I,n_x*(T+1),n_x*(T+1))+S*Q*C_bar)*H*k_tilde+S*r
 
     P_u_w=Q*C_bar*H
@@ -131,7 +171,7 @@ function instantiateASAP(A,B,C,k,N_m,N_c,T)
     @constraint(model,sum(sigma_control)==N_c)
 
     # Robustness constraint
-    @constraint(model,Lambda_rob*H_eta .== H_all_S*[P_x_w P_x_v P_x_x0])
+    @constraint(model,Lambda_rob*H_eta .== H_all_S*P_x_all)
     @constraint(model,Lambda_rob*h_eta .<= alpha*h_all_S-H_all_S*x_tilde)
 
     # Measurement constraint (indicator constraint)
@@ -166,14 +206,72 @@ function instantiateASAP(A,B,C,k,N_m,N_c,T)
         LHS_bloc = Q[(blk_row_idx-1)*n_x.+(1:n_x),blk_row_idx*n_y+1:end]
         @constraint(model,LHS_bloc .== zeros(size(LHS_bloc)))
     end
+    
+    if enforceRegular
+        if N_m==0
+            t_meas=[]
+        elseif N_m==1
+            t_meas=[round(Int8,(T-1)/2)]
+        else
+            t_meas=round.(Int8,0:(T-1)/(N_m-1):T-1)
+        end
+        @constraint(model,sigma_meas[t_meas.+1].==1)
+        
+        if N_c==0
+            t_control=[]
+        elseif N_c==1
+            t_control=[round(Int8,(T-1)/2)]
+        else
+            t_control=round.(Int8,0:(T-1)/(N_c-1):T-1)
+        end
+        @constraint(model,sigma_control[t_control.+1].==1)
+    end
 
     @objective(model,Min,alpha)
     
-    return model, C_bar, S
+    return model, C_bar, S, P_x_all, x_tilde, polEta # 3 last quantities are to compute polx = P_x_all*polEta + x_tilde
 end
 
+function getResultsASAP(model,C_bar,S)
+    alpha=model[:alpha]
+    sigma_meas=model[:sigma_meas]
+    sigma_control=model[:sigma_control]
+    Q=model[:Q]
+    r=model[:r]
+    
+    alpha_opt=value(alpha)
+    sigma_meas_opt=value.(sigma_meas)
+    sigma_meas_opt=sigma_meas_opt.>=0.9 # to have binary
+    sigma_control_opt=value.(sigma_control)
+    sigma_control_opt=sigma_control_opt.>=0.9 # to have binary
+    Q_opt=value.(Q);
+    r_opt=value.(r);
+    
+    T=length(sigma_meas_opt)
+    l1,l2=size(Q)
+    n_u=convert(Int64,l1/T)
+    n_y=convert(Int64,l2/T)
+    
+
+    F_bigMatrix = inv(I + Q_opt*C_bar*S ) * Q_opt; # slow
+    F=zeros(n_u,n_y,T,T) # possible with a reshape ? Or with only one loop ?
+    for t=0:T-1
+        for tau=0:t
+            F[:,:,t+1,tau+1]=F_bigMatrix[1+t*n_u:(t+1)*n_u , 1+tau*n_y:(tau+1)*n_y]
+        end
+    end
+
+    f=inv(I + Q_opt*C_bar*S ) * r_opt; # slow
+    f=reshape(f,(n_u,T))
+    
+    return F, f, alpha_opt, sigma_meas_opt, sigma_control_opt
+end
+
+
+
+# ALAP functions
+
 function instantiateALAP(A,B,C,k,N_m,N_c,T_max,alpha)
-    BigM=1e5
 
     n_y,n_x=size(C)
     _,n_u=size(B)
@@ -309,40 +407,109 @@ function instantiateALAP(A,B,C,k,N_m,N_c,T_max,alpha)
     return model, C_bar, S
 end
 
-
-function getResultsASAP(model,C_bar,S)
-    alpha=model[:alpha]
-    sigma_meas=model[:sigma_meas]
-    sigma_control=model[:sigma_control]
-    Q=model[:Q]
-    r=model[:r]
+function greedyALAP(A,B,C,k,N_m,N_c,T_max,alpha)
+    model,_,_=instantiateALAP(A,B,C,k,1,1,T_max,alpha)
+    set_optimizer(model, Gurobi.Optimizer)
+    optimize!(model)
     
-    alpha_opt=value(alpha)
-    sigma_meas_opt=value.(sigma_meas)
-    sigma_meas_opt=sigma_meas_opt.>=0.9 # to have binary
-    sigma_control_opt=value.(sigma_control)
-    sigma_control_opt=sigma_control_opt.>=0.9 # to have binary
-    Q_opt=value.(Q);
-    r_opt=value.(r);
+    ind_meas=findall(value.(model[:sigma_meas]).>=0.9)
+    ind_control=findall(value.(model[:sigma_control]).>=0.9)
     
-    T=length(sigma_meas_opt)
-    l1,l2=size(Q)
-    n_u=convert(Int64,l1/T)
-    n_y=convert(Int64,l2/T)
+    N_min=min(N_m,N_c)
+    for N_loc=2:N_min
+        model,_,_=instantiateALAP(A,B,C,k,N_loc,N_loc,T_max,alpha)
+        @constraint(model,model[:sigma_meas][ind_meas].==1)
+        @constraint(model,model[:sigma_control][ind_control].==1)
+        set_optimizer(model, Gurobi.Optimizer)
+        optimize!(model)
+        ind_meas=findall(value.(model[:sigma_meas]).>=0.9)
+        ind_control=findall(value.(model[:sigma_control]).>=0.9)
+    end
     
-
-    F_bigMatrix = inv(I + Q_opt*C_bar*S ) * Q_opt; # slow
-    F=zeros(n_u,n_y,T,T) # possible with a reshape ? Or with only one loop ?
-    for t=0:T-1
-        for tau=0:t
-            F[:,:,t+1,tau+1]=F_bigMatrix[1+t*n_u:(t+1)*n_u , 1+tau*n_y:(tau+1)*n_y]
+    #if N_m!=N_c
+    #    model,_,_=instantiateALAP(A,B,C,k,N_m,N_c,T_max,alpha)
+    #    @constraint(model,model[:sigma_meas][ind_meas].==1)
+    #    @constraint(model,model[:sigma_control][ind_control].==1)
+    #    set_optimizer(model, Cbc.Optimizer)
+    #    optimize!(model)
+    #end
+    
+    if N_m>N_c
+        for N_m_loc=N_min+1:N_m
+            model,_,_=instantiateALAP(A,B,C,k,N_m_loc,N_c,T_max,alpha)
+            @constraint(model,model[:sigma_meas][ind_meas].==1)
+            @constraint(model,model[:sigma_control][ind_control].==1)
+            set_optimizer(model, Gurobi.Optimizer)
+            optimize!(model)
+            ind_meas=findall(value.(model[:sigma_meas]).>=0.9)
+        end
+    elseif N_c>N_m
+        for N_c_loc=N_min+1:N_c
+            model,_,_=instantiateALAP(A,B,C,k,N_m,N_c_loc,T_max,alpha)
+            @constraint(model,model[:sigma_meas][ind_meas].==1)
+            @constraint(model,model[:sigma_control][ind_control].==1)
+            set_optimizer(model, Gurobi.Optimizer)
+            optimize!(model)
+            ind_control=findall(value.(model[:sigma_control]).>=0.9)
         end
     end
-
-    f=inv(I + Q_opt*C_bar*S ) * r_opt; # slow
-    f=reshape(f,(n_u,T))
     
-    return F, f, alpha_opt, sigma_meas_opt, sigma_control_opt
+    return model
+end
+
+
+function binarySearchALAP(A,B,C,k,N_m,N_c,T_max,alpha)
+    # We assume that polX0 is included in polS, then T >= 1
+    
+    # Compute alpha_opt(T=1)
+    current_T=1
+    current_N_m=min(N_m,current_T)
+    current_N_c=min(N_c,current_T)
+    ASAPmodel,_,_=instantiateASAP(A,B,C,k,current_N_m,current_N_c,current_T)
+    set_optimizer(ASAPmodel, Gurobi.Optimizer)
+    optimize!(ASAPmodel)
+    current_alpha=objective_value(ASAPmodel)
+    print("\nBINARY SEARCH: current_T=$(current_T).\n\n")
+    
+    if current_alpha>alpha
+        print("\nCAUTION: Maybe T_opt=0: We have assumed that X_0 is in S.\n")
+        return ASAPmodel,current_T,current_alpha
+    end
+    
+    # Compute alpha_opt(T=T_max)
+    current_T=T_max
+    current_N_m=min(N_m,current_T)
+    current_N_c=min(N_c,current_T)
+    ASAPmodel,_,_=instantiateASAP(A,B,C,k,current_N_m,current_N_c,current_T)
+    set_optimizer(ASAPmodel, Gurobi.Optimizer)
+    optimize!(ASAPmodel)
+    current_alpha=objective_value(ASAPmodel)
+    print("\nBINARY SEARCH: current_T=$(current_T).\n\n")
+    
+    if current_alpha<alpha
+        return ASAPmodel,current_T,current_alpha
+    end
+    
+    # lb <= T_opt < ub holds at each iteration
+    lb=1
+    ub=T_max
+    while ub-lb>1
+        current_T=round(Int8,(ub+lb)/2)
+        current_N_m=min(N_m,current_T)
+        current_N_c=min(N_c,current_T)
+        ASAPmodel,_,_=instantiateASAP(A,B,C,k,current_N_m,current_N_c,current_T)
+        set_optimizer(ASAPmodel, Gurobi.Optimizer)
+        optimize!(ASAPmodel)
+        current_alpha=objective_value(ASAPmodel)
+        if current_alpha>alpha
+            ub=current_T
+        else
+            lb=current_T
+        end
+        print("\nBINARY SEARCH: current_T=$(current_T). T_opt is in [$(lb) $(ub)[\n\n")
+    end
+    
+    return ASAPmodel,lb,current_alpha
 end
 
 function getResultsALAP(model,C_bar,S)
@@ -378,43 +545,6 @@ function getResultsALAP(model,C_bar,S)
     
     return F, f, T_opt, sigma_meas_opt, sigma_control_opt
 end
-
-
-function simulateTrajectories(A,B,C,k,F,f;numberSamples=1)
-    # Works only if all polyhedra are hypercubes
-    n_y,n_x=size(C)
-    T=size(f)[2]
-    
-    x=zeros(numberSamples,n_x,T+1)
-    for i=1:numberSamples
-        y=zeros(n_y,T)
-        x[i,:,0+1]=rand(Float64,n_x)*2 .-1 # x_0
-        for t=0:T-1
-            # compute y
-            v=rand(Float64,n_y)*2 .-1
-            y[:,t+1]=C*x[i,:,t+1]+v
-
-            # compute u
-            u=f[:,t+1]
-            for tau=0:t
-                u+=F[:,:,t+1,tau+1]*y[:,tau+1]
-            end
-
-            # compute x
-            w=rand(Float64,n_x)*2 .-1
-            x[i,:,t+2]=A*x[i,:,t+1]+B*u+k+w
-        end
-    end
-    return x
-end
-
-
-
-
-
-
-
-
 
 
 
