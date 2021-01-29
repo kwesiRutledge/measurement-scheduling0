@@ -4,12 +4,14 @@ function [results] = run_experiments( varargin )
 	%
 
 	%% Add Library Folder to the Path
-	if isempty(strfind(path,'./lib/'))
-		addpath('./lib/')
+	matlab_library_rel_path = '../lib/matlab/';
+	if isempty(strfind(path,matlab_library_rel_path))
+		addpath(matlab_library_rel_path)
 	end
 
-	if isempty(strfind(path,'./experiments/'))
-		addpath('./experiments/')
+	matlab_experiments_folder = 'matlab_experiments'
+	if isempty(strfind(path,['./' matlab_experiments_folder ]))
+		addpath(['./' matlab_experiments_folder ])
 	end
 
 	add_libraries('tbxmanager','gurobi')

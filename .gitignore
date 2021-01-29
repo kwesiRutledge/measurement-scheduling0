@@ -4,3 +4,6 @@
 #Ignore Image Files
 *.png
 *.eps
+
+# ignore jupyter notebook checkpoints
+*.ipynb_checkpoints*
