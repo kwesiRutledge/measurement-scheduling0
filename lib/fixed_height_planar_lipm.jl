@@ -8,11 +8,15 @@ Description:
     [ https://hdl.handle.net/1721.1/124432 ].
 """
 
+using HCubature
+
 """
 get_lipm
 Description:
     This function retrieves a standard Fixed Height LIPM defined with the parameters discussed in the
     paper referenced above.
+Usage:
+    (continuous_system, discrete_system) = get_lipm()
 """
 function get_lipm()
     # Constants
@@ -40,7 +44,25 @@ function get_lipm()
 
     # Create Discrete Time System
 
-    return c_system
+    Ad = exp(A*dt)
+    Bd = zeros((2,1))
+    est_err = 0.0
+
+    let f = x -> transpose([1; 0.0])*exp(A.*x)*B
+        (Bd[1],est_err) = hquadrature( f , 0.0 , dt )
+    end
+    print("Estimated error in calculating first entry of discretized B: ")
+    println(est_err)
+
+    let f = x-> transpose([0.0; 1])*exp(A.*x)*B
+        (Bd[2],est_err) = hquadrature(f, 0.0, dt)
+    end
+    print("Estimated error in calculating second entry of discretized B: ")
+    println(est_err)
+
+    d_system = LinearSystem(Ad,Bd,C,W,V)
+
+    return (c_system, d_system)
 
 
 end
