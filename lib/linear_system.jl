@@ -16,8 +16,8 @@ struct LinearSystem
     A
     B
     C
-    eta_w # The infinity norm bound of disturbances w
-    eta_v # The infinity norm bound of disturbances v
+    W # The bounded set that process noise can come from
+    V # The bounded set that measurement noise can come from
 end
 
 """
@@ -26,6 +26,13 @@ end
         Checks that the system described by the tuple LinearSystem is consistent.
 """
 function check( system_in::LinearSystem )
+    # Declare Variables
+    n = 1
+    m = 1
+    p = 1
+    
+    # Algorithm
+
     sizeA = size(system_in.A)
     if length(sizeA) ≠ 0 #If A is not a scalar, then apply the following checks.
         n_x1 , n_x2 = sizeA
@@ -33,6 +40,7 @@ function check( system_in::LinearSystem )
             #This indicates that system_in.A is not square
             return false
         end
+        n = n_x1 # Assign dimension.
     end
 
     sizeC = size(system_in.C)
@@ -42,6 +50,37 @@ function check( system_in::LinearSystem )
             #This indicates that system_in.A is of different dimension than Checks
             return false
         end
+        p = n_y # Assign dimension of the output.
+    end
+
+    # Check the Type of Disturbance Sets
+    A_symbol = Symbol("A")
+    b_symbol = Symbol("b")
+
+    W_type = typeof(system_in.W)
+    if !( A_symbol in fieldnames(W_type) && b_symbol in fieldnames(W_type) )
+        # If this is true, then the disturbance set is not a Polyhedron
+        # in H representation.
+        return false
+    end
+
+    if fulldim(system_in.W) ≠ n
+        # If the W Polyhedron is not defined in the proper dimension,
+        # then return an error.
+        return false
+    end
+
+    V_type = typeof(system_in.V)
+    if !( A_symbol in fieldnames(V_type) && b_symbol in fieldnames(V_type) )
+        # If this is true, then the disturbance set is not a Polyhedron
+        # in H representation.
+        return false
+    end
+
+    if fulldim(system_in.V) ≠ p
+        # If the V Polyhedron is not defined in the proper dimension,
+        # then return an error.
+        return false
     end
 
     #All Checks Passed
@@ -94,13 +133,13 @@ function define_simple_eta_HPolytope( system_in::LinearSystem , eta_x0 , T_Horiz
     T = T_Horizon_in
 
     #Create the Polytopes defined by system_in.eta_w and system_in.eta_v
-    H_w = [ I(n_w) ; -I(n_w) ]
-    h_w = system_in.eta_w*ones(2*n_w,1)
-    dim_H_w = 2*n_w
+    H_w = system_in.W.A
+    h_w = system_in.W.b
+    dim_H_w = length(h_w)
 
-    H_v = [ I(n_v) ; -I(n_v) ]
-    h_v = system_in.eta_v*ones(2*n_v,1)
-    dim_H_v = 2*n_v
+    H_v = system_in.V.A
+    h_v = system_in.V.b
+    dim_H_v = length(h_v)
 
     H_x0 = [I(n_x) ; -I(n_x)]
     h_x0 = eta_x0*ones(2*n_x,1)

@@ -1,13 +1,14 @@
 using Test
 using LinearAlgebra
+using Polyhedra
 
 @testset "LinearSystem Class Struct" begin
     #Test The Constructor
     A = [1 0; 0 2]
     B = [1;1]
     C = [1 0]
-    eta_w = 1
-    eta_v = 1
+    eta_w = MixedMatHRep(HalfSpace([1.0, 0.2], 1.0) ∩ HalfSpace([-1.0, -0.2], 1.0) )
+    eta_v = MixedMatHRep(HalfSpace([1.0], 1.0) ∩ HalfSpace([-1.0], 1.0) )
 
     #Create System 1
     system1 = LinearSystem(A,B,C,eta_w,eta_v)
@@ -19,21 +20,21 @@ end;
     A = [1 0; 0 2; 0 3]
     B = [1;1]
     C = [1 0]
-    eta_w = 1
-    eta_v = 1
+    P_w = MixedMatHRep(HalfSpace([1.0, 0.2], 1.0) ∩ HalfSpace([-1.0, -0.2], 1.0) )
+    P_v = MixedMatHRep(HalfSpace([1.0], 1.0) ∩ HalfSpace([-1.0], 1.0) )
 
     #Create System 1
-    system1 = LinearSystem(A,B,C,eta_w,eta_v)
+    system1 = LinearSystem(A,B,C,P_w,P_v)
     @test !check(system1)
 
     #Test2
     A = [1 0; 0 3]
-    system2 = LinearSystem(A,B,C,eta_w,eta_v)
+    system2 = LinearSystem(A,B,C,P_w,P_v)
     @test check(system2)
 
     #Test3
     C = [1 0 0]
-    system3 = LinearSystem(A,B,C,eta_w,eta_v)
+    system3 = LinearSystem(A,B,C,P_w,P_v)
     @test !check(system3)
 end
 
@@ -42,26 +43,26 @@ end
      A = [1 0; 0 2; 0 3]
      B = [1;1]
      C = [1 0]
-     eta_w = 1
-     eta_v = 1
+     P_w = MixedMatHRep(HalfSpace([1.0, 0.2], 1.0) ∩ HalfSpace([-1.0, -0.2], 1.0) )
+     P_v = MixedMatHRep(HalfSpace([1.0], 1.0) ∩ HalfSpace([-1.0], 1.0) )
  
      #Create System 1
-     system1 = LinearSystem(A,B,C,eta_w,eta_v)
+     system1 = LinearSystem(A,B,C,P_w,P_v)
      @test_throws ArgumentError x_dim(system1)
 
      #Test2
      A = [1 0; 0 3]
-     system2 = LinearSystem(A,B,C,eta_w,eta_v)
+     system2 = LinearSystem(A,B,C,P_w,P_v)
      @test x_dim(system2) == 2
 
      # Test 3: One Dimensional System
      A = 7
      B = 5
      C = 3
-     eta_w = 1.0
-     eta_v = 1.0
+     P_w = MixedMatHRep(HalfSpace([1.0], 1.0) ∩ HalfSpace([-1.0], 1.0) )
+     P_v = MixedMatHRep(HalfSpace([1.0], 1.0) ∩ HalfSpace([-1.0], 1.0) )
 
-     system3 = LinearSystem(A,B,C,eta_w,eta_v)
+     system3 = LinearSystem(A,B,C,P_w,P_v)
      @test x_dim(system3) == 1
 end
 
@@ -70,26 +71,27 @@ end
      A = [1 0; 0 2; 0 3]
      B = [1;1]
      C = [1 0]
-     eta_w = 1
-     eta_v = 1
+     P_w = MixedMatHRep(HalfSpace([1.0, 0.2], 1.0) ∩ HalfSpace([-1.0, -0.2], 1.0) )
+     P_v = MixedMatHRep(HalfSpace([1.0], 1.0) ∩ HalfSpace([-1.0], 1.0) )
  
      #Create System 1
-     system1 = LinearSystem(A,B,C,eta_w,eta_v)
+     system1 = LinearSystem(A,B,C,P_w,P_v)
      @test_throws ArgumentError y_dim(system1)
 
      #Test2
      A = [1 0; 0 3]
-     system2 = LinearSystem(A,B,C,eta_w,eta_v)
+     system2 = LinearSystem(A,B,C,P_w,P_v)
      @test y_dim(system2) == 1
 
     #Test3
     C = [1 0 0]
-    system3 = LinearSystem(A,B,C,eta_w,eta_v)
+    system3 = LinearSystem(A,B,C,P_w,P_v)
     @test_throws ArgumentError y_dim(system3)
 
     #Test4
     C = [1 0;2 2;3 1]
-    system4 = LinearSystem(A,B,C,eta_w,eta_v)
+    P_v = MixedMatHRep(HalfSpace([1.0,1.5,2.0], 1.0) ∩ HalfSpace([-1.0,-1.5,-2.0], 1.0) )
+    system4 = LinearSystem(A,B,C,P_w,P_v)
     @test y_dim(system4) == 3
 end
 
@@ -98,11 +100,11 @@ end
     A = 3
     B = 7
     C = 1
-    eta_w = 0.1
-    eta_v = 0.5
+    P_w = MixedMatHRep(HalfSpace([1.0], 0.1) ∩ HalfSpace([-1.0], 0.1) )
+    P_v = MixedMatHRep(HalfSpace([1.0], 0.5) ∩ HalfSpace([-1.0], 0.5) )
 
     #Create system1
-    system1 = LinearSystem(A,B,C,eta_w,eta_v)
+    system1 = LinearSystem(A,B,C,P_w,P_v)
     eta_x0 = 0.2
     T1 = 1
     H_eta1, h_eta1 = define_simple_eta_HPolytope(system1,eta_x0,T1)
@@ -117,10 +119,11 @@ end
     B = 1
     C = 1
     eta_w = 0.1
-    eta_v = 0.5
+    P_w = MixedMatHRep(HalfSpace([1.0], eta_w) ∩ HalfSpace([-1.0], eta_w) )
+    P_v = MixedMatHRep(HalfSpace([1.0], 0.5) ∩ HalfSpace([-1.0], 0.5) )
 
     #Create system1
-    system1 = LinearSystem(A,B,C,eta_w,eta_v)
+    system1 = LinearSystem(A,B,C,P_w,P_v)
     eta_x0 = 0.2
     T1 = 1
 
