@@ -38,20 +38,34 @@ function get_drones( num_drones )
         C[(drone_index-1)*2+2,(drone_index-1)*4+4] = 1
     end
 
-    println(C)
+    # Create the Performance Matrices D_x, D_u
+    D = zeros((num_drones*2,num_states))
+    for drone_index = 1:num_drones
+        D[(drone_index-1)*2+1,(drone_index-1)*2+1] = 1
+        D[(drone_index-1)*2+2,(drone_index-1)*2+2] = 1
+    end
+    
+    d=zeros(size(D,1))
 
     # Creating Disturbance Set
 
     eta_w = 0.5
-    W = MixedMatHRep(HalfSpace([1.0, 0.0], 0.0) ∩ HalfSpace([0.0, 1.0], eta_w) ∩ HalfSpace([-1.0, 0.0], 0.0) ∩ HalfSpace([0.0, -1.0], eta_w) )
+    H_w = [ 1.0 0 ; 0 1.0 ; -1.0 0 ; 0.0 -1.0 ]
+    h_w = eta_w * [1.0;1.0;1.0;1.0]
+    W = hrep(H_w,h_w)
+
     eta_v = 0.2
     H_v = [ 1.0 0 ; 0 1.0 ; -1.0 0 ; 0.0 -1.0 ]
     h_v = eta_v * [1.0;1.0;1.0;1.0]
     V = hrep(H_v,h_v)
 
+    # Create Input Set U
+    eta_u = 50
+    U = hRepRectangle(-eta_u,-eta_u,eta_u,eta_u)
+
     # Create Continuous Time Linear System
 
-    d_system = LinearSystem(Ad,Bd,C,W,V)
+    d_system = LinearSystem(Ad,Bd,C,D,d,W,V,U)
 
     return d_system
 

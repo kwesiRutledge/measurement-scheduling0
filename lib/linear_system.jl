@@ -5,7 +5,11 @@
         Represents a discrete-time linear dynamical system as follows:
          x(t+1) = A x(t) + B u(t) + w(t)
          y(t)   = C x(t) + v(t)
-        where w(t) in { w in R^n | ||w||_{infty} <= eta_w } and v(t) in { v in R^p | ||v||_{infty} <= eta_v }
+         z(t)   = D x(t) + d
+        where 
+            w(t) in { w in R^n | W.A * w <= W.b },
+            v(t) in { v in R^p | V.A * v <= V.b }, and 
+            u(t) in { u in R^m | U.A * u <= U.b }.
 """
 
 using LinearAlgebra
@@ -16,8 +20,11 @@ struct LinearSystem
     A
     B
     C
+    D
+    d
     W # The bounded set that process noise can come from
     V # The bounded set that measurement noise can come from
+    U # The Polyhedron that the inputs are allowed to come from
 end
 
 """
