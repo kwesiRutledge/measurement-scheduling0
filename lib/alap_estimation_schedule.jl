@@ -145,3 +145,24 @@ function alap_estimation_schedule_alg1( TimeHorizon , MeasurementBudget )
     return reverse(M)
 
 end
+
+"""
+sample_polytope
+Description:
+    This function samples a polytope as specified by polytope_in. 
+"""
+function sample_polytope( polytope_in::Polyhedron )
+    
+    # Constants
+
+    vrep_of_polytope_in = vrep(polytope_in)
+    num_vertices = size(vrep_of_polytope_in.V,1)
+
+    # Algorithm
+    theta = rand(Float64,num_vertices)
+    theta = theta/sum(theta) #This vector sums to one
+
+    # Return our sample a random and convex combination of the vertices
+    return transpose(tempV2.V)*theta 
+
+end

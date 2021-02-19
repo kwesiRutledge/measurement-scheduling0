@@ -6,6 +6,7 @@
 """
 
 using LinearAlgebra
+using Polyhedra
 using Test
 
 """
@@ -118,4 +119,59 @@ function compute_C_M( C::Number , M , T )
  
     #Return C matrix
     return C_sched
+end
+
+"""
+    test_set_containment
+    Description:
+        Tests set containment using an result from robust optimizaiton.
+"""
+function test_set_containment( poly_X::Polyhedron , poly_Y::Polyhedron )
+
+    # Input Processing
+    dim_X = fulldim(poly_X)
+    dim_Y = fulldim(poly_Y)
+
+    if dim_X ≠ dim_Y 
+        throw(DimensionMismatch("The dimensions of X and Y are not the same."))
+    end
+
+    # Constants
+
+    H_X = hrep(poly_X).A
+    h_X = hrep(poly_X).b
+
+    H_Y = hrep(poly_Y).A
+    h_Y = hrep(poly_Y).b 
+
+    n_HX = size(H_X,1)
+    n_HY = size(H_Y,1)
+
+    model = Model(Gurobi.Optimizer)
+    empty!(model)
+
+    # Algorithm
+
+    # Create Optimization Variables
+
+    @variable(model,Lambda[1:n_HY,1:n_HX])
+
+    # Create Constraints
+
+    @constraint(model,Lambda.>=0)
+
+    @constraint(model, Lambda * H_X .== H_Y )
+    @constraint(model, Lambda * h_X .<= h_Y)
+
+    # Create Objective
+    @objective(model,Min,0)
+
+    #Optimize!
+    set_silent(model)
+    optimize!(model)
+
+    print("termination_status = $(termination_status(model))\n")
+
+    return termination_status(model)
+
 end

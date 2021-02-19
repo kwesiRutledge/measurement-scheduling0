@@ -125,6 +125,61 @@ function y_dim( system_in::LinearSystem )
 end
 
 """
+    z_dim
+    Description:
+        Computes the dimension of the system's outputs.
+"""
+function z_dim( system_in::LinearSystem )
+
+    if !check( system_in )
+        throw(ArgumentError("The input LinearSystem is not valid. Please check its dimensions."))
+    end
+
+    return size(system_in.D,1)
+end
+
+"""
+    u_dim
+    Description:
+        Computes the dimension of the system's outputs.
+"""
+function u_dim( system_in::LinearSystem )
+
+    if !check( system_in )
+        throw(ArgumentError("The input LinearSystem is not valid. Please check its dimensions."))
+    end
+
+    return size(system_in.B,2)
+end
+
+"""
+    packet_loss_observability_mat
+    Description:
+        Computes the Observability Matrix with respect to the packet loss signal sigma
+        as defined in 'On Observability in Networked Control Systems with Packet Losses'
+        [https://doi-org.proxy.lib.umich.edu/10.1109/ALLERTON.2015.7447010].
+    Usage:
+        O_t = packet_loss_observability_mat( sys0 , [1,0,0,1] )
+"""
+function packet_loss_observability_mat( system_in::LinearSystem , sigma_in )
+    
+    # Input Checking
+
+    if length(sigma_in) == 0
+        throw(ArgumentError("The input sigma_in should be a binary vector with length at least 1."))
+    end
+
+    # Algorithm
+
+    O_t = sigma_in[1]*system_in.C
+    for t = 1:(length(sigma_in)-1)
+        O_t = [ O_t ; sigma_in[t+1]*system_in.C * system_in.A^t ]
+    end
+
+    return O_t
+end
+
+"""
     define_simple_eta_HPolyhtope
     Description:
 
