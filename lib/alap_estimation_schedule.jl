@@ -166,3 +166,127 @@ function sample_polytope( polytope_in::Polyhedron )
     return transpose(tempV2.V)*theta 
 
 end
+
+"""
+ConcreteScheduleParameters
+Description:
+    Defines a simple object which can store some of the 
+"""
+struct ConcreteScheduleParameters
+    ControlSchedule::Array{Float64}
+    MeasurementSchedule::Array{Float64}
+end
+
+function instantiateASAP( system , N_m , N_c , T )
+    """
+    Construct a JuMP model of the MILP problem.
+    If enforceRegular, sigma[t]=1 for Round( t=k*(T-1)/(N-1) ), t=0,...,N-1. Or t=Round( (T-1)/2 ) if N=1.
+    If minimize scaling, minimize alpha such that z_t in alpha*polS for all t
+    """
+    
+    n_x=x_dim(system)
+    n_y=y_dim(system)
+    n_z=z_dim(system)
+    n_u=u_dim(system)
+    
+    # avoid errors when enforceRegular
+    N_m=min(T,N_m)
+    N_c=min(T,N_c)
+    
+    polW=system.polW
+    polV=system.polV
+    polX0=system.polX0
+    
+    polEta=etaPolyhedra(polW,polV,polX0,T)
+    (H_eta,h_eta)=getHrep(polEta)
+    
+    polU=system.polU
+    (H_U,h_U)=getHrep(polU)
+    H_all_U=kron(Matrix(I,T,T),H_U)
+    h_all_U=kron(ones(T),h_U)
+    
+    pol_all_S=prod(system.list_polS) # cartesian product polS_0 X polS_1 X ... X polS_T
+    (H_all_S,h_all_S)=getHrep(pol_all_S)
+    
+    n_w=nhalfspaces(polW)
+    n_v=nhalfspaces(polV)
+    n_x0=nhalfspaces(polX0)
+    n_S=nhalfspaces(pol_all_S)
+    n_U=nhalfspaces(polU) # different than n_u
+    n_eta=nhalfspaces(polEta)
+    
+    model = Model()
+    if minimizeScaling
+        @variable(model,alpha)
+    else
+        alpha=1
+    end
+    @variable(model,Q[1:n_u*T,1:n_y*T])
+    @variable(model,r[1:n_u*T])
+    @variable(model,Lambda_rob[1:n_S,1:n_eta])
+    @variable(model,Gamma[1:T*n_U,1:n_eta])
+    
+    if enforceRegular
+        sigma_meas=regularSampling(T,N_m) # not a JuMP variable
+        sigma_control=regularSampling(T,N_c)
+    else
+        @variable(model,sigma_meas[1:T],Bin) # sigma_meas[i] is sigma^m_(i-1)
+        @variable(model,sigma_control[1:T],Bin) # sigma_control[i] is sigma^c_(i-1)
+        
+        # Budget constraints
+        @constraint(model,sum(sigma_meas)<=N_m)
+        @constraint(model,sum(sigma_control)<=N_c)
+    end
+    
+    P_z_all,z_tilde, P_u_all,u_tilde, C_bar,S_bar=computePmatrix(system,T, Q,r)
+    
+    # Safety (robustness) constraint
+    @constraint(model,Lambda_rob*H_eta .== H_all_S*P_z_all)
+    @constraint(model,Lambda_rob*h_eta .<= alpha*h_all_S-H_all_S*z_tilde)
+    
+    # Bounded inputs constraint
+    @constraint(model,Gamma*H_eta .== H_all_U*P_u_all)
+    @constraint(model,Gamma*h_eta .<= h_all_U-H_all_U*u_tilde)
+
+    # Measurement constraint (indicator constraint)
+    for t=0:T-1
+        I_t=1+t*n_y:(t+1)*n_y
+        @constraint(model,  Q[:,I_t] .<= ones(n_u*T,n_y)*sigma_meas[t+1]*BigM )
+        @constraint(model, -Q[:,I_t] .<= ones(n_u*T,n_y)*sigma_meas[t+1]*BigM )
+    end
+
+    # Control constraint (indicator constraint)
+    # special case t=0
+    J_t_1=1:n_u # J_{t-1}
+    @constraint(model,  Q[J_t_1,:] .<= ones(n_u,n_y*T)*sigma_control[1]*BigM)
+    @constraint(model, -Q[J_t_1,:] .<= ones(n_u,n_y*T)*sigma_control[1]*BigM)
+    @constraint(model,  r[J_t_1] .<= ones(n_u)*sigma_control[1]*BigM)
+    @constraint(model, -r[J_t_1] .<= ones(n_u)*sigma_control[1]*BigM)
+    for t=1:T-1
+        J_t=1+t*n_u:(t+1)*n_u
+        @constraint(model,  Q[J_t,:]-Q[J_t_1,:] .<= ones(n_u,n_y*T)*sigma_control[t+1]*BigM)
+        @constraint(model, -Q[J_t,:]+Q[J_t_1,:] .<= ones(n_u,n_y*T)*sigma_control[t+1]*BigM)
+        @constraint(model,  r[J_t]-r[J_t_1] .<= ones(n_u)*sigma_control[t+1]*BigM)
+        @constraint(model, -r[J_t]+r[J_t_1] .<= ones(n_u)*sigma_control[t+1]*BigM)
+        J_t_1=J_t
+    end
+
+    # positivity constraints
+    if minimizeScaling
+        @constraint(model,alpha >= 0)
+    end
+    @constraint(model,Lambda_rob .>= zeros(size(Lambda_rob)))
+    @constraint(model,Gamma .>= zeros(size(Gamma)))
+    
+    
+    for blk_row_idx = 1:div(size(Q,1), n_u)-1 # should it be n_u instead of n_x
+        LHS_bloc = Q[(blk_row_idx-1)*n_u.+(1:n_u),blk_row_idx*n_y+1:end]
+        @constraint(model,LHS_bloc .== zeros(size(LHS_bloc)))
+    end
+    
+    if minimizeScaling
+        @objective(model,Min,alpha)
+    end
+    
+    return model, C_bar, S_bar, P_z_all, z_tilde, P_u_all, u_tilde, polEta # 5 last quantities are to compute polZ = P_z_all*polEta + z_tilde and polU = P_u_all*polEta + u_tilde
+end

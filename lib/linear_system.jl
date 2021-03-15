@@ -15,6 +15,10 @@
 using LinearAlgebra
 using JuMP
 using Gurobi
+using Polyhedra
+
+# Todo: Make the struct require SimplePolyhedron or Interval arguments for W, V, and U.
+#       Not sure how to make an input required to have a class within a set of types. :/
 
 struct LinearSystem
     A
@@ -22,9 +26,9 @@ struct LinearSystem
     C
     D
     d
-    W # The bounded set that process noise can come from
-    V # The bounded set that measurement noise can come from
-    U # The Polyhedron that the inputs are allowed to come from
+    W::Polyhedron{Float64} # The bounded set that process noise can come from
+    V::Polyhedron{Float64} # The bounded set that measurement noise can come from
+    U::Polyhedron{Float64} # The Polyhedron that the inputs are allowed to come from
 end
 
 """
@@ -38,8 +42,11 @@ function check( system_in::LinearSystem )
     m = 1
     p = 1
     
-    # Algorithm
+    #############
+    # Algorithm #
+    #############
 
+    # Check System Matrices
     sizeA = size(system_in.A)
     if length(sizeA) ≠ 0 #If A is not a scalar, then apply the following checks.
         n_x1 , n_x2 = sizeA
@@ -61,34 +68,7 @@ function check( system_in::LinearSystem )
     end
 
     # Check the Type of Disturbance Sets
-    A_symbol = Symbol("A")
-    b_symbol = Symbol("b")
-
-    W_type = typeof(system_in.W)
-    if !( A_symbol in fieldnames(W_type) && b_symbol in fieldnames(W_type) )
-        # If this is true, then the disturbance set is not a Polyhedron
-        # in H representation.
-        return false
-    end
-
-    if fulldim(system_in.W) ≠ n
-        # If the W Polyhedron is not defined in the proper dimension,
-        # then return an error.
-        return false
-    end
-
-    V_type = typeof(system_in.V)
-    if !( A_symbol in fieldnames(V_type) && b_symbol in fieldnames(V_type) )
-        # If this is true, then the disturbance set is not a Polyhedron
-        # in H representation.
-        return false
-    end
-
-    if fulldim(system_in.V) ≠ p
-        # If the V Polyhedron is not defined in the proper dimension,
-        # then return an error.
-        return false
-    end
+    # Not needed now that struct restricts types
 
     #All Checks Passed
     return true
@@ -182,9 +162,27 @@ end
 """
     define_simple_eta_HPolyhtope
     Description:
+        Defines a polytope containing all possible choices of eta. In math, eta is:
+              [  w  ]
+        eta = [  v  ]
+              [ x0  ]
+        Or more completely:
+              [  w(0)  ]
+              [  w(1)  ]
+              [  w(2)  ]
+              [  ....  ]
+              [ w(T-1) ]
+        eta = [  v(0)  ]
+              [  v(1)  ]
+              [  ....  ]
+              [ v(T-1) ]
+              [   x0   ]
+        where T is T_Horizon_in.
 
+    Usage:
+        H_eta , h_eta = define_simple_eta_HPolyhtope( system_in , P_x0 , T )
 """
-function define_simple_eta_HPolytope( system_in::LinearSystem , eta_x0 , T_Horizon_in )
+function define_simple_eta_HPolytope( system_in::LinearSystem , P_x0::Polyhedron{Float64} , T_Horizon_in )
     #Constants
     n_x = x_dim(system_in)
     n_y = y_dim(system_in)
@@ -195,17 +193,20 @@ function define_simple_eta_HPolytope( system_in::LinearSystem , eta_x0 , T_Horiz
     T = T_Horizon_in
 
     #Create the Polytopes defined by system_in.eta_w and system_in.eta_v
-    H_w = system_in.W.A
-    h_w = system_in.W.b
+    hrep_W = MixedMatHRep(system_in.W)
+    H_w = hrep_W.A
+    h_w = hrep_W.b
     dim_H_w = length(h_w)
 
-    H_v = system_in.V.A
-    h_v = system_in.V.b
+    hrep_V = MixedMatHRep(system_in.V)
+    H_v = hrep_V.A
+    h_v = hrep_V.b
     dim_H_v = length(h_v)
 
-    H_x0 = [I(n_x) ; -I(n_x)]
-    h_x0 = eta_x0*ones(2*n_x,1)
-    dim_H_x0 = 2*n_x
+    hrep_X0 = MixedMatHRep(P_x0)
+    H_x0 = hrep_X0.A
+    h_x0 = hrep_X0.b
+    dim_H_x0 = length(h_x0)
 
     #Algorithm
     H_eta = [kron(Matrix(1I,T,T), H_w) zeros(T*dim_H_w,T*n_y + n_x) ;
@@ -385,3 +386,13 @@ function evaluate_schedule_wrt( system_in::LinearSystem , schedule_in , time_hor
     return objective_value(model) , termination_status(model)
 
 end
+
+"""
+    evaluate_schedule_cost
+    Description:
+        Evaluates the schedule cost with respect to
+        (i) an input linear system (system_in)
+        (ii) a measurement schedule (m_schedule),
+        (iii) a control schedule (c_schedule),
+        and tries to find the minimal value of alpha (the worst case bound on the estimation error)
+"""
