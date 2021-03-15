@@ -18,29 +18,67 @@ Description:
 Usage:
     (continuous_system, discrete_system) = get_lipm()
 """
-function get_lipm()
+function get_lipm(T)
     # Constants
-    g = 10; #Gravitational Constant
+    g = 9.81; #Gravitational Constant m/s^2
     
     zbar_cm = 1;      #1 meter
-    r_foot = 0.05;    #0.05 meters
+    r_foot = 0.5;    #0.05 meters
 
     dt = 0.1
 
     # Create Continuous Time System
-    A = [   0  1 ;
+    A = [   0.0  1.0 ;
             (g/(zbar_cm))    0 ]
-    B = [ 0 ; (g/(zbar_cm))*r_foot ]
-    C = [1.0 0; 0.0 1.0]
-
-    eta_w = r_foot/5.0
-    W = MixedMatHRep(HalfSpace([1.0, 0.0], 0.0) ∩ HalfSpace([0.0, 1.0], eta_w) ∩ HalfSpace([-1.0, 0.0], 0.0) ∩ HalfSpace([0.0, -1.0], eta_w) )
-    eta_v = 0.1
-    H_v = [ 1.0 0 ; 0 1.0 ; -1.0 0 ; 0.0 -1.0 ]
-    h_v = eta_v * [1.0;1.0;1.0;1.0]
-    V = hrep(H_v,h_v)
-
-    c_system = LinearSystem(A,B,C,W,V)
+    B = [ 0.0 ; (g/(zbar_cm))*r_foot ]
+    C = [1.0 0.0; 0.0 1.0]
+    D = [1.0 0.0; 0.0 1.0]
+    
+    n_x=size(A,1)
+    n_u=size(B,2)
+    n_y=size(C,1)
+    n_z=size(D,1)
+    
+    k = zeros(n_x)
+    d = zeros(n_z)
+    
+    
+    eta_w = 0.05 #r_foot/5.0
+    W = eta_w*hypercube(n_x)
+    
+    #W = MixedMatHRep(HalfSpace([1.0, 0.0], 0.0) ∩ HalfSpace([0.0, 1.0], eta_w) ∩ HalfSpace([-1.0, 0.0], 0.0) ∩ HalfSpace([0.0, -1.0], eta_w) )
+    
+    
+    eta_v = 0.01
+    V = eta_v*hypercube(n_y)
+    
+    #H_v = [ 1.0 0 ; 0 1.0 ; -1.0 0 ; 0.0 -1.0 ]
+    #h_v = eta_v * [1.0;1.0;1.0;1.0]
+    #V = hrep(H_v,h_v)
+    
+    
+    eta_x0 = 0.1
+    X0 = eta_x0*hypercube(n_x)
+    
+    
+    #H_u = [-1.0 ; 1.0]
+    #H_u=reshape(H_u, length(H_u), 1) # convert array into matrix
+    #h_u = [0.0 ; r_foot]
+    #U = hrep(H_u,h_u)
+    U = hypercube(n_u) # [-1,1]
+    
+    
+    eta_x_cm = 0.75
+    eta_x_cm_dot = 5
+    S = (eta_x_cm*hypercube(1)) * (eta_x_cm_dot*hypercube(1))
+    
+    list_S=[]
+    for t=0:T
+        push!(list_S,S)
+    end
+    
+    # continuous time system
+    c_system = LinearSystem(A,B,C,D,k,d,W,V,X0,U,list_S)
 
     # Create Discrete Time System
 
@@ -60,9 +98,7 @@ function get_lipm()
     print("Estimated error in calculating second entry of discretized B: ")
     println(est_err)
 
-    d_system = LinearSystem(Ad,Bd,C,W,V)
+    d_system = LinearSystem(Ad,Bd,C,D,k,d,W,V,X0,U,list_S)
 
-    return (c_system, d_system)
-
-
+    return  d_system, c_system
 end
